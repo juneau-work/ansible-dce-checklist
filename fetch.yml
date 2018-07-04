@@ -1,0 +1,41 @@
+- hosts: node
+  vars:
+    logfile: /tmp/caas_log-{{ lookup('pipe', 'date +%Y-%m-%d-%H:%M') }}.logs
+  tasks:
+    - name: find log file
+      find:
+        paths: /var/log/caas-check/
+        age: -3600
+        age_stamp: ctime
+        patterns: 'caas-check*'
+      register: logfile_name
+
+    - name: Fetch log file from remote host
+      fetch:
+        src: "{{ item.path }}"
+        flat: yes
+        dest: "/tmp/{{ inventory_hostname }}.logs"
+      with_items: "{{ logfile_name.files }}"
+
+    - name: Merge Logs
+      run_once: yes
+      shell: |
+        echo "**************************************************************************" >> {{ logfile }}
+        echo {{ item }} >> {{ logfile }}
+        echo "**************************************************************************" >> {{ logfile }}
+        cat /tmp/{{ item }}.logs >> {{ logfile }} 
+      with_items: "{{ groups['node'] }}"
+      delegate_to: localhost
+
+    - mail:
+        host: "127.0.0.1"
+        port: 25
+        subject: Caas-Log-{{ lookup('pipe', 'date +%Y-%m-%d-%H:%M') }}
+        body: today's logs file
+        from: caas@localhost
+        to: xx@163.com
+        #cc: xxx@example.com
+        attach: "{{ logfile }}"
+        charset: utf8
+      delegate_to: localhost
+      run_once: yes
